@@ -1,0 +1,28 @@
+name: Build and test
+on: [push, pull_request]
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Python dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install numpy onnx onnxruntime
+      - name: Install ONNX Runtime C++ release
+        run: |
+          curl -fsSL https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/onnxruntime-linux-x64-1.20.1.tgz | tar xz
+      - name: Build and unit test
+        run: |
+          cmake -S . -B build -DONNXRUNTIME_ROOT="$PWD/onnxruntime-linux-x64-1.20.1"
+          cmake --build build
+          ctest --test-dir build --output-on-failure
+      - name: Export and compare models
+        run: |
+          python scripts/export.py
+          build/benchmark artifacts/float.onnx artifacts/images.txt 16 2 10 artifacts/float.csv
+          build/benchmark artifacts/int8.onnx artifacts/images.txt 16 2 10 artifacts/int8.csv
+          python scripts/check.py artifacts/float.csv
